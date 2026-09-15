@@ -1,23 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, FileText, CheckCircle2, X, Sparkles, BookOpen, Lightbulb, HelpCircle, Quote } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, X } from 'lucide-react';
+import { askAboutDocument, storeDocument } from '../lib/api';
+import { saveRagResult } from '../lib/storage';
+import { useAuth } from '../context/AuthContext';
 
 export default function UploadPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedFile, setSelectedFile] = useState(null);
-  const [options, setOptions] = useState({
-    summary: false,
-    flashcards: true,
-    explain: true,
-    qa: false,
-    sources: true,
-  });
-  const [course, setCourse] = useState('');
-  const [tags, setTags] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadError, setUploadError] = useState('');
-
-  const toggleOption = (key) => setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
+  const [question, setQuestion] = useState('');
 
   const handleFileSelection = (file) => {
     if (!file) return;
@@ -29,6 +23,7 @@ export default function UploadPage() {
     }
 
     setSelectedFile({
+      file,
       name: file.name,
       size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
     });
@@ -45,17 +40,37 @@ export default function UploadPage() {
     handleFileSelection(event.dataTransfer.files[0]);
   };
 
-  const handleUploadSubmit = () => {
+  const handleUploadSubmit = async () => {
     if (!selectedFile) {
-      setUploadError('Choose a file before adding it to your library.');
+      setUploadError('Choose a file before asking a question.');
+      return;
+    }
+
+    if (!question.trim()) {
+      setUploadError('Enter a question about the selected material.');
       return;
     }
 
     setIsProcessing(true);
-    setTimeout(() => {
+    setUploadError('');
+
+    try {
+      const storedDocument = await storeDocument(selectedFile.file, user.email);
+      const result = await askAboutDocument(selectedFile.file, question.trim());
+      saveRagResult(user.email, {
+        fileName: selectedFile.name,
+        fileSize: selectedFile.size,
+        fileType: selectedFile.file.type || 'document',
+        storageId: storedDocument.id,
+        question: question.trim(),
+        result,
+      });
       setIsProcessing(false);
-      navigate('/library');
-    }, 1200);
+      navigate('/library', { state: { result, fileName: selectedFile.name } });
+    } catch (error) {
+      setIsProcessing(false);
+      setUploadError(error.message || 'Unable to connect to the RAG backend.');
+    }
   };
 
   return (
@@ -65,7 +80,7 @@ export default function UploadPage() {
         {/* Title */}
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold">Upload your study materials</h1>
-          <p className="text-xs text-gray-400">PDFs, images, audio, or text - we'll turn them into knowledge.</p>
+          <p className="text-xs text-gray-400">Upload a supported document and ask the RAG pipeline a question.</p>
         </div>
 
         {/* Drag & Drop Zone */}
@@ -77,7 +92,6 @@ export default function UploadPage() {
           {/* File category icons */}
           <div className="flex gap-3">
             <span className="p-3 bg-red-900/30 border border-red-500/40 rounded-xl text-red-400 text-xs">PDF</span>
-            <span className="p-3 bg-yellow-900/30 border border-yellow-500/40 rounded-xl text-yellow-400 text-xs">AUDIO</span>
             <span className="p-3 bg-green-900/30 border border-green-500/40 rounded-xl text-green-400 text-xs">IMG</span>
             <span className="p-3 bg-blue-900/30 border border-blue-500/40 rounded-xl text-blue-400 text-xs">DOC</span>
           </div>
@@ -90,16 +104,16 @@ export default function UploadPage() {
             <input
               id="file-upload"
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.mp3,.wav,.txt,.doc,.docx"
+              accept=".pdf,.png,.jpg,.jpeg,.txt,.docx"
               onChange={handleFileInput}
               className="sr-only"
             />
-            <span className="text-[10px] text-gray-500 block mt-1">Max size: 20MB per file. Multiple files supported.</span>
+            <span className="text-[10px] text-gray-500 block mt-1">Max size: 20MB. PDF, DOCX, TXT, PNG, and JPG.</span>
           </div>
 
           {/* Format pills */}
           <div className="flex flex-wrap gap-2 pt-2">
-            {['Text files', 'Audio (MP3, WAV)', 'Images (PNG, JPG)', 'PDF'].map((fmt, i) => (
+            {['Text files', 'DOCX', 'Images (PNG, JPG)', 'PDF'].map((fmt, i) => (
               <span key={i} className="text-[11px] bg-[#112338] border border-cyan-900/60 px-3 py-1 rounded-lg text-gray-300">
                 {fmt}
               </span>
@@ -128,77 +142,16 @@ export default function UploadPage() {
           </div>
         )}
 
-        {/* Processing Options Section */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold text-brand-accent tracking-wider uppercase border-b border-brand-accent/40 inline-block pb-0.5">
-            Processing Options
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {[
-              { id: 'summary', title: 'Generate summary', desc: 'AI-powered overview of key points', icon: BookOpen },
-              { id: 'flashcards', title: 'Create flashcards', desc: 'Automatic Q&A cards for studying', icon: Sparkles },
-              { id: 'explain', title: 'Explain concepts', desc: 'Break down complex topics', icon: Lightbulb },
-              { id: 'qa', title: 'Answer Question', desc: 'Ask questions about this material', icon: HelpCircle },
-              { id: 'sources', title: 'Sources included', desc: 'Show sources for answers', icon: Quote },
-            ].map((opt) => {
-              const Icon = opt.icon;
-              return (
-                <div
-                  key={opt.id}
-                  onClick={() => toggleOption(opt.id)}
-                  className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition ${
-                    options[opt.id]
-                      ? 'bg-white text-gray-900 border-white'
-                      : 'bg-[#0E2034] text-gray-300 border-cyan-900/60'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={options[opt.id] || false}
-                    onChange={() => {}}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{opt.title}</span>
-                    </div>
-                    <p className={`text-[10px] ${options[opt.id] ? 'text-gray-600' : 'text-gray-400'}`}>{opt.desc}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Organization / Course Details */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold text-brand-accent tracking-wider uppercase border-b border-brand-accent/40 inline-block pb-0.5">
-            Organization (Optional)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] text-gray-300 block mb-1">Subject / Course</label>
-              <input
-                type="text"
-                placeholder="Select or type a course name"
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
-                className="w-full bg-[#0E2034] border border-cyan-900/60 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-accent"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] text-gray-300 block mb-1">Tags</label>
-              <input
-                type="text"
-                placeholder="Add keywords to find this later"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                className="w-full bg-[#0E2034] border border-cyan-900/60 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-accent"
-              />
-            </div>
-          </div>
+        <div className="space-y-2">
+          <label htmlFor="question" className="text-[11px] text-gray-300 block">Question for the RAG pipeline</label>
+          <textarea
+            id="question"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="What is the main idea of this document?"
+            rows={3}
+            className="w-full bg-[#0E2034] border border-cyan-900/60 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-brand-accent resize-y"
+          />
         </div>
 
         {/* Action Button */}

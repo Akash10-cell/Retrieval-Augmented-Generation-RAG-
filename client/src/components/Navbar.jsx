@@ -1,14 +1,15 @@
-import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { BrainCircuit } from 'lucide-react';
+import { BrainCircuit, Monitor, Moon, Sun } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const { mode, setMode } = useTheme();
   const navigate = useNavigate();
 
   return (
-    <header className="flex items-center justify-between px-8 py-4 bg-brand-dark/80 backdrop-blur sticky top-0 z-50 border-b border-gray-800">
+    <header className="app-navbar flex items-center justify-between px-8 py-4 bg-brand-dark/80 backdrop-blur sticky top-0 z-50 border-b border-gray-800">
       <Link to="/" className="flex items-center gap-2 text-xl font-bold tracking-wider">
         <BrainCircuit className="text-brand-accent w-7 h-7" />
         <span className="text-white font-extrabold">2nd</span>
@@ -20,6 +21,18 @@ export default function Navbar() {
         <Link to="/upload" className="text-brand-accent font-semibold hover:underline">Upload Material</Link>
         <Link to="/chat" className="hover:text-brand-accent transition">ChatBot</Link>
         <Link to="/about" className="hover:text-brand-accent transition">About us</Link>
+
+        <div className="theme-switcher" aria-label="Color theme">
+          <button onClick={() => setMode('light')} className={mode === 'light' ? 'active' : ''} aria-label="Use light theme" title="Light theme">
+            <Sun className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => setMode('system')} className={mode === 'system' ? 'active' : ''} aria-label="Use system theme" title="System theme">
+            <Monitor className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => setMode('dark')} className={mode === 'dark' ? 'active' : ''} aria-label="Use dark theme" title="Dark theme">
+            <Moon className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         {user ? (
           <div className="flex items-center gap-4">

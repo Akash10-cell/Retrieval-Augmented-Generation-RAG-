@@ -1,10 +1,9 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, FileText, Sparkles, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#06101E] text-white flex flex-col items-center px-4 pb-20">
+    <div className="page-landing min-h-screen bg-[#06101E] text-white flex flex-col items-center px-4 pb-20">
       {/* Hero Section */}
       <section className="max-w-5xl w-full grid grid-cols-1 md:grid-cols-2 gap-8 items-center py-16">
         {/* Glow Brain Illustration Box */}
@@ -34,7 +33,7 @@ export default function LandingPage() {
           <div className="space-y-2.5">
             <div className="flex items-center gap-2.5 text-xs text-gray-200">
               <CheckCircle2 className="w-4 h-4 text-brand-accent shrink-0" />
-              <span>Works with PDFs, images, and audio.</span>
+              <span>Works with PDFs, images, and Docx.</span>
             </div>
             <div className="flex items-center gap-2.5 text-xs text-gray-200">
               <CheckCircle2 className="w-4 h-4 text-brand-accent shrink-0" />
@@ -84,7 +83,7 @@ export default function LandingPage() {
             <span className="text-xs text-gray-600 italic">(Very simple)</span>
           </div>
           <ol className="md:col-span-2 space-y-2 text-xs font-semibold text-gray-800 list-decimal pl-4">
-            <li>Upload your files (PDF, image, or audio)</li>
+            <li>Upload your files (PDF, image, or Docx)</li>
             <li>We read and understand your content</li>
             <li>Ask any question</li>
             <li>Get answers with links to the original file</li>
