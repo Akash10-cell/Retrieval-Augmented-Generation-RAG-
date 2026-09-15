@@ -5,10 +5,10 @@ import { User, Mail, Lock, CheckSquare, Square } from 'lucide-react';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(false);
-  const [username, setUsername] = useState('JohnDoe');
-  const [email, setEmail] = useState('demo@secondbrain.ai');
-  const [password, setPassword] = useState('123456');
-  const [confirmPassword, setConfirmPassword] = useState('123456');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
 
@@ -25,9 +25,15 @@ export default function AuthPage() {
     }
 
     if (isLogin) {
-      login(email, password);
+      if (!login(email, password)) {
+        setError('No account found with those credentials. Sign up first or check your details.');
+        return;
+      }
     } else {
-      signup(username, email, password);
+      if (!signup(username, email, password)) {
+        setError('An account with this email already exists. Please log in.');
+        return;
+      }
     }
     navigate('/upload');
   };
@@ -109,7 +115,7 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              className="w-full py-2.5 bg-brand-accent hover:brightness-105 text-gray-950 font-bold rounded-xl text-xs transition duration-150"
+              className="w-full py-2.5 bg-[#E6C665] text-[#07111E] border border-[#F4D979] hover:bg-white hover:border-white font-bold rounded-xl text-xs shadow-[0_4px_14px_rgba(230,198,101,0.2)] transition duration-150"
             >
               {isLogin ? 'Log In' : 'Sign Up'}
             </button>
