@@ -34,7 +34,7 @@ export default function Navbar() {
         ) : (
           <Link
             to="/login"
-            className="bg-brand-accent/20 border border-brand-accent text-brand-accent px-4 py-1.5 rounded-full hover:bg-brand-accent hover:text-black transition"
+            className="bg-[#122438] border border-[#E6C665] text-white px-4 py-1.5 rounded-full hover:bg-[#E6C665] hover:text-[#07111E] hover:shadow-[0_0_14px_rgba(230,198,101,0.35)] transition"
           >
             Login / SignUp
           </Link>

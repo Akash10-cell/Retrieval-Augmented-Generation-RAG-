@@ -4,7 +4,7 @@ import { UploadCloud, FileText, CheckCircle2, X, Sparkles, BookOpen, Lightbulb, 
 
 export default function UploadPage() {
   const navigate = useNavigate();
-  const [selectedFile, setSelectedFile] = useState({ name: 'Screenshot (69).png', size: '397.6 KB' });
+  const [selectedFile, setSelectedFile] = useState(null);
   const [options, setOptions] = useState({
     summary: false,
     flashcards: true,
@@ -15,10 +15,42 @@ export default function UploadPage() {
   const [course, setCourse] = useState('');
   const [tags, setTags] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const toggleOption = (key) => setOptions((prev) => ({ ...prev, [key]: !prev[key] }));
 
+  const handleFileSelection = (file) => {
+    if (!file) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      setSelectedFile(null);
+      setUploadError('That file is larger than the 20 MB limit. Please choose a smaller file.');
+      return;
+    }
+
+    setSelectedFile({
+      name: file.name,
+      size: `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+    });
+    setUploadError('');
+  };
+
+  const handleFileInput = (event) => {
+    handleFileSelection(event.target.files[0]);
+    event.target.value = '';
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    handleFileSelection(event.dataTransfer.files[0]);
+  };
+
   const handleUploadSubmit = () => {
+    if (!selectedFile) {
+      setUploadError('Choose a file before adding it to your library.');
+      return;
+    }
+
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
@@ -37,7 +69,11 @@ export default function UploadPage() {
         </div>
 
         {/* Drag & Drop Zone */}
-        <div className="border border-dashed border-cyan-800/80 rounded-2xl p-8 bg-[#091728]/60 flex flex-col items-center justify-center space-y-4">
+        <div
+          onDrop={handleDrop}
+          onDragOver={(event) => event.preventDefault()}
+          className="border border-dashed border-cyan-800/80 rounded-2xl p-8 bg-[#091728]/60 flex flex-col items-center justify-center space-y-4"
+        >
           {/* File category icons */}
           <div className="flex gap-3">
             <span className="p-3 bg-red-900/30 border border-red-500/40 rounded-xl text-red-400 text-xs">PDF</span>
@@ -49,8 +85,15 @@ export default function UploadPage() {
           <UploadCloud className="w-10 h-10 text-cyan-400 animate-bounce" />
           
           <div className="text-center">
-            <p className="text-xs font-semibold">Drag & drop your files here</p>
-            <p className="text-xs text-cyan-400 font-medium underline cursor-pointer">or Click to browse</p>
+            <p className="text-xs font-semibold">Drag & drop your file here</p>
+            <label htmlFor="file-upload" className="text-xs text-cyan-400 font-medium underline cursor-pointer">or click to browse</label>
+            <input
+              id="file-upload"
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.mp3,.wav,.txt,.doc,.docx"
+              onChange={handleFileInput}
+              className="sr-only"
+            />
             <span className="text-[10px] text-gray-500 block mt-1">Max size: 20MB per file. Multiple files supported.</span>
           </div>
 
@@ -63,6 +106,8 @@ export default function UploadPage() {
             ))}
           </div>
         </div>
+
+        {uploadError && <p className="text-xs text-red-300 bg-red-900/30 border border-red-500/30 rounded-lg p-3">{uploadError}</p>}
 
         {/* Uploaded File Pill */}
         {selectedFile && (

@@ -48,7 +48,7 @@ export default function LandingPage() {
 
           <div className="pt-2">
             <Link
-              to="/upload"
+              to="/login"
               className="inline-block bg-gradient-to-r from-gray-200 to-gray-400 text-gray-900 font-bold px-8 py-2.5 rounded-full hover:brightness-110 shadow-lg transition"
             >
               Get Started

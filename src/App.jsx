@@ -1,11 +1,18 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import UploadPage from './pages/UploadPage';
 import LibraryPage from './pages/LibraryPage';
+
+function ProtectedRoute({ children }) {
+  const { user } = useAuth();
+
+  return user ? children : <Navigate to="/login" replace />;
+}
 
 function App() {
   return (
@@ -17,8 +24,8 @@ function App() {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/login" element={<AuthPage />} />
-              <Route path="/upload" element={<UploadPage />} />
-              <Route path="/library" element={<LibraryPage />} />
+              <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+              <Route path="/library" element={<ProtectedRoute><LibraryPage /></ProtectedRoute>} />
               {/* Fallback to landing */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
