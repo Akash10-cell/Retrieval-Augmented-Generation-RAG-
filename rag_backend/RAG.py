@@ -152,3 +152,127 @@ Question: {question}
         "answer": generate_response.text,
         "citations": citations
     }
+
+
+# Persistent document storage API. The existing RAG endpoint above remains unchanged.
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import Lock
+from uuid import uuid4
+import json
+from fastapi import Query
+from fastapi.responses import FileResponse
+
+DOCUMENT_STORAGE_DIR = Path(__file__).resolve().parent / "document_storage"
+DOCUMENT_METADATA_FILE = DOCUMENT_STORAGE_DIR / "metadata.json"
+DOCUMENT_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+document_storage_lock = Lock()
+stored_document_extensions = {".pdf", ".docx", ".txt", ".png", ".jpg", ".jpeg"}
+
+
+def read_document_metadata():
+    if not DOCUMENT_METADATA_FILE.exists():
+        return []
+
+    try:
+        return json.loads(DOCUMENT_METADATA_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def write_document_metadata(documents):
+    temporary_file = DOCUMENT_METADATA_FILE.with_suffix(".tmp")
+    temporary_file.write_text(json.dumps(documents, indent=2), encoding="utf-8")
+    temporary_file.replace(DOCUMENT_METADATA_FILE)
+
+
+def get_document_for_user(document_id, owner_email):
+    return next(
+        (
+            document
+            for document in read_document_metadata()
+            if document["id"] == document_id
+            and document["owner_email"] == owner_email.lower()
+        ),
+        None,
+    )
+
+
+@app.post("/documents")
+async def store_document(
+    file: UploadFile = File(...),
+    owner_email: str = Form(...),
+):
+    original_name = Path(file.filename or "document").name
+    extension = Path(original_name).suffix.lower()
+    if extension not in stored_document_extensions:
+        raise HTTPException(status_code=400, detail="Unsupported document format.")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="The uploaded document is empty.")
+    if len(file_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Documents must be 20 MB or smaller.")
+
+    document_id = str(uuid4())
+    stored_file = DOCUMENT_STORAGE_DIR / f"{document_id}{extension}"
+    document = {
+        "id": document_id,
+        "owner_email": owner_email.lower().strip(),
+        "name": original_name,
+        "content_type": file.content_type or "application/octet-stream",
+        "size": len(file_bytes),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    with document_storage_lock:
+        stored_file.write_bytes(file_bytes)
+        documents = read_document_metadata()
+        documents.insert(0, document)
+        write_document_metadata(documents)
+
+    return document
+
+
+@app.get("/documents")
+def list_documents(owner_email: str = Query(...)):
+    owner_email = owner_email.lower().strip()
+    return [
+        document
+        for document in read_document_metadata()
+        if document["owner_email"] == owner_email
+    ]
+
+
+@app.get("/documents/{document_id}/download")
+def download_document(document_id: str, owner_email: str = Query(...)):
+    document = get_document_for_user(document_id, owner_email.strip())
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    extension = Path(document["name"]).suffix.lower()
+    stored_file = DOCUMENT_STORAGE_DIR / f"{document_id}{extension}"
+    if not stored_file.exists():
+        raise HTTPException(status_code=404, detail="Stored document file not found.")
+
+    return FileResponse(
+        stored_file,
+        media_type=document["content_type"],
+        filename=document["name"],
+    )
+
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: str, owner_email: str = Query(...)):
+    with document_storage_lock:
+        document = get_document_for_user(document_id, owner_email.strip())
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found.")
+
+        extension = Path(document["name"]).suffix.lower()
+        stored_file = DOCUMENT_STORAGE_DIR / f"{document_id}{extension}"
+        stored_file.unlink(missing_ok=True)
+        documents = [item for item in read_document_metadata() if item["id"] != document_id]
+        write_document_metadata(documents)
+
+    return {"status": True, "id": document_id}

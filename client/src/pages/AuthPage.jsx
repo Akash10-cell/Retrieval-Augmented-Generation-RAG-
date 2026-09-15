@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { User, Mail, Lock, CheckSquare, Square } from 'lucide-react';
@@ -12,8 +12,14 @@ export default function AuthPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
 
-  const { login, signup } = useAuth();
+  const { user, login, signup } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      navigate('/library', { replace: true });
+    }
+  }, [navigate, user]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -39,7 +45,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07111E] flex items-center justify-center p-6">
+    <div className="page-auth min-h-screen bg-[#07111E] flex items-center justify-center p-6">
       <div className="max-w-4xl w-full bg-[#0a1626] border border-cyan-900/40 rounded-2xl overflow-hidden shadow-2xl grid grid-cols-1 md:grid-cols-2">
         
         {/* Left Form Area */}
