@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { BookOpen, HelpCircle, Wrench, Upload, Search, Trash2, Eye, CheckCircle2, Loader2, BarChart2, MessageCircle, Send, X, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { addConversation, deleteUserDocument, getUserData } from '../lib/storage';
-import { askAboutDocument, deleteStoredDocument, getDocumentDownloadUrl, getStoredDocumentFile } from '../lib/api';
+import { getConversations, getStoredDocuments, askStoredDocument, deleteStoredDocument, getDocumentDownloadUrl, saveConversation } from '../lib/api';
 
 function ExpandableAnswer({ answer, className = '' }) {
   const [expanded, setExpanded] = useState(false);
@@ -25,14 +24,48 @@ export default function LibraryPage() {
   const [search, setSearch] = useState('');
   const { state } = useLocation();
   const { user } = useAuth();
-  const userData = getUserData(user.email);
-  const [documents, setDocuments] = useState(userData.documents);
-  const [conversations, setConversations] = useState(userData.conversations);
+  const [documents, setDocuments] = useState([]);
+  const [conversations, setConversations] = useState([]);
   const [activeDocument, setActiveDocument] = useState(null);
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [conversationError, setConversationError] = useState('');
   const [notice, setNotice] = useState(() => state?.result ? `New document added: ${state.fileName}` : '');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    Promise.all([getStoredDocuments(user.email), getConversations(user.email)])
+      .then(([storedDocuments, storedConversations]) => {
+        if (!isMounted) return;
+        const normalizedConversations = storedConversations.map((conversation) => ({
+          ...conversation,
+          documentId: conversation.document_id || conversation.documentId,
+          createdAt: conversation.created_at || conversation.createdAt,
+        }));
+        const summaries = new Map();
+        normalizedConversations.forEach((conversation) => {
+          if (!summaries.has(conversation.documentId)) summaries.set(conversation.documentId, conversation.answer);
+        });
+        setConversations(normalizedConversations);
+        setDocuments(storedDocuments.map((document) => ({
+          ...document,
+          title: document.name,
+          storageId: document.id,
+          type: document.content_type,
+          size: `${(document.size / 1024 / 1024).toFixed(1)} MB`,
+          pages: 'RAG indexed',
+          status: 'Processed',
+          summary: summaries.get(document.id) || 'Stored document ready for questions.',
+          uploadedAt: document.created_at,
+        })));
+      })
+      .catch((error) => {
+        if (isMounted) setConversationError(error.message || 'Unable to load your library.');
+      });
+
+    return () => { isMounted = false; };
+  }, [user.email]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -51,7 +84,6 @@ export default function LibraryPage() {
       }
     }
 
-    deleteUserDocument(user.email, document.id);
     setDocuments((currentDocuments) => currentDocuments.filter((item) => item.id !== document.id));
     setConversations((currentConversations) => currentConversations.filter((item) => item.documentId !== document.id));
     if (activeDocument?.id === document.id) {
@@ -73,15 +105,20 @@ export default function LibraryPage() {
     setIsAsking(true);
     setConversationError('');
     try {
-      const file = await getStoredDocumentFile(activeDocument.storageId, user.email, activeDocument.title);
-      const result = await askAboutDocument(file, question.trim());
-      const conversation = addConversation(user.email, {
-        documentId: activeDocument.id,
+      const result = await askStoredDocument(activeDocument.storageId, user.email, question.trim());
+      const conversation = await saveConversation({
+        owner_email: user.email,
+        document_id: activeDocument.id,
         fileName: activeDocument.title,
         question: question.trim(),
-        result,
+        answer: result.answer,
+        citations: result.citations || [],
       });
-      setConversations((currentConversations) => [conversation, ...currentConversations]);
+      setConversations((currentConversations) => [{
+        ...conversation,
+        documentId: conversation.document_id || conversation.documentId || activeDocument.id,
+        createdAt: conversation.created_at || conversation.createdAt,
+      }, ...currentConversations]);
       setQuestion('');
     } catch (error) {
       setConversationError(error.message || 'Unable to continue this conversation.');

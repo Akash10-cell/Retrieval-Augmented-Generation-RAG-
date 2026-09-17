@@ -13,7 +13,52 @@ async function parseResponse(response, fallbackMessage) {
     throw new Error(detail);
   }
 
+  if (payload && payload.status === false) {
+    throw new Error(payload.message || fallbackMessage);
+  }
+
   return payload;
+}
+
+export async function registerUser(name, email, password) {
+  const response = await fetch(`${API_BASE_URL}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password }),
+  });
+
+  return parseResponse(response, 'Registration failed.');
+}
+
+export async function loginUser(email, password) {
+  const response = await fetch(`${API_BASE_URL}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  return parseResponse(response, 'Login failed.');
+}
+
+export async function getStoredDocuments(ownerEmail) {
+  const response = await fetch(`${API_BASE_URL}/documents?owner_email=${encodeURIComponent(ownerEmail)}`);
+  return parseResponse(response, 'The document library could not be loaded.');
+}
+
+export async function getConversations(ownerEmail) {
+  const response = await fetch(`${API_BASE_URL}/conversations?owner_email=${encodeURIComponent(ownerEmail)}`);
+  return parseResponse(response, 'Conversation history could not be loaded.');
+}
+
+export async function saveConversation(conversation) {
+  const response = await fetch(`${API_BASE_URL}/conversations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(conversation),
+  });
+
+  const payload = await parseResponse(response, 'The conversation could not be saved.');
+  return payload.conversation || payload;
 }
 
 export async function storeDocument(file, ownerEmail) {
@@ -63,4 +108,14 @@ export async function askAboutDocument(file, question) {
   });
 
   return parseResponse(response, 'The RAG request failed.');
+}
+
+export async function askStoredDocument(documentId, ownerEmail, question) {
+  const response = await fetch(`${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner_email: ownerEmail, question }),
+  });
+
+  return parseResponse(response, 'The stored document query failed.');
 }
