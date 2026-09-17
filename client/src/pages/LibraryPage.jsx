@@ -1,9 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, HelpCircle, Wrench, Upload, Search, Trash2, Eye, CheckCircle2, Loader2, BarChart2, MessageCircle, Send, X } from 'lucide-react';
+import { BookOpen, HelpCircle, Wrench, Upload, Search, Trash2, Eye, CheckCircle2, Loader2, BarChart2, MessageCircle, Send, X, Bell } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { addConversation, deleteUserDocument, getUserData } from '../lib/storage';
 import { askAboutDocument, deleteStoredDocument, getDocumentDownloadUrl, getStoredDocumentFile } from '../lib/api';
+
+function ExpandableAnswer({ answer, className = '' }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLongAnswer = answer.length > 480 || answer.split('\n').length > 8;
+
+  return (
+    <div className={`expandable-answer ${expanded ? 'is-expanded' : ''} ${className}`}>
+      <p className="whitespace-pre-wrap">{answer}</p>
+      {isLongAnswer && (
+        <button type="button" onClick={() => setExpanded((current) => !current)} className="answer-toggle">
+          {expanded ? '...less' : 'more...'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function LibraryPage() {
   const [search, setSearch] = useState('');
@@ -16,6 +32,13 @@ export default function LibraryPage() {
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [conversationError, setConversationError] = useState('');
+  const [notice, setNotice] = useState(() => state?.result ? `New document added: ${state.fileName}` : '');
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeout = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   const filteredDocs = documents.filter(doc => doc.title.toLowerCase().includes(search.toLowerCase()));
 
@@ -40,6 +63,7 @@ export default function LibraryPage() {
     setActiveDocument(document);
     setQuestion('');
     setConversationError('');
+    setNotice(`Continuing chat for ${document.title}`);
   };
 
   const handleAsk = async (event) => {
@@ -68,8 +92,15 @@ export default function LibraryPage() {
 
   return (
     <div className="min-h-screen bg-[#07111E] text-white flex">
+      {notice && (
+        <div className="library-toast" role="status" aria-live="polite">
+          <Bell className="w-4 h-4" />
+          <span>{notice}</span>
+          <button type="button" onClick={() => setNotice('')} aria-label="Dismiss notification"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-[#0A1626] border-r border-cyan-950/60 p-5 flex flex-col justify-between hidden md:flex">
+      <aside className="library-sidebar w-64 bg-[#0A1626] border-r border-cyan-950/60 p-5 flex flex-col justify-between hidden md:flex">
         <div className="space-y-6">
           <Link to="/" className="text-xl font-bold tracking-wider text-brand-accent block">
             2nd <span className="text-white">BR@IN</span>
@@ -103,10 +134,16 @@ export default function LibraryPage() {
             <span className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold px-2">Recent Uploads</span>
             <div className="space-y-2">
               {documents.slice(0, 2).map((document) => (
-                <div key={document.id} className="p-2 bg-[#0c1c2e] rounded-lg border border-cyan-950 text-[11px] flex justify-between items-center">
+                <button
+                  key={document.id}
+                  type="button"
+                  onClick={() => handleContinue(document)}
+                  className="recent-upload-item"
+                  title={`Open conversation history for ${document.title}`}
+                >
                   <span className="truncate max-w-[120px] text-gray-300">{document.title}</span>
-                  <span className="text-[9px] text-green-400">Saved</span>
-                </div>
+                  <span className="text-[9px] text-cyan-400">Chat</span>
+                </button>
               ))}
               {documents.length === 0 && <span className="text-[11px] text-gray-500 px-2">No uploads yet</span>}
             </div>
@@ -147,61 +184,19 @@ export default function LibraryPage() {
               <p className="text-[10px] uppercase tracking-widest text-cyan-400">RAG answer</p>
               <h2 className="text-sm font-bold text-white mt-1">{state.fileName}</h2>
             </div>
-            <p className="text-sm text-gray-200 whitespace-pre-wrap">{state.result.answer}</p>
+            <ExpandableAnswer answer={state.result.answer} className="text-sm text-gray-200" />
             {state.result.citations?.length > 0 && (
               <div className="space-y-2">
                 <p className="text-[10px] uppercase tracking-widest text-gray-500">Sources</p>
                 {state.result.citations.map((citation) => (
-                  <p key={citation.chunk_id} className="text-[11px] text-gray-400 border-l-2 border-cyan-700 pl-3">
-                    {citation.text_snippet}
-                  </p>
+                  <ExpandableAnswer
+                    key={citation.chunk_id}
+                    answer={citation.text_snippet}
+                    className="source-expandable text-[11px] text-gray-400 border-l-2 border-cyan-700 pl-3"
+                  />
                 ))}
               </div>
             )}
-          </section>
-        )}
-
-        {/* Analytics Card */}
-        <div className="analytics-card text-gray-950 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 max-w-xl">
-          <div className="flex items-center gap-6">
-            {/* Donut Chart Representation */}
-            <div className="relative w-28 h-28 flex items-center justify-center">
-              <div className="w-24 h-24 rounded-full border-8 border-yellow-700 border-t-red-600 border-r-blue-600 border-l-green-600"></div>
-              <BarChart2 className="w-6 h-6 absolute text-gray-900" />
-            </div>
-
-            <div>
-              <h3 className="text-lg font-black tracking-tight flex items-center gap-1.5">
-                Analytics
-              </h3>
-              <div className="text-xs space-y-1 mt-2 font-semibold">
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-yellow-700"></span> Docx: 45%</div>
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-600"></span> Images: 20%</div>
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-blue-600"></span> Text File: 25%</div>
-                <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-red-600"></span> PDF: 10%</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-right">
-            <span className="text-xs font-bold uppercase tracking-wider block">Total Index</span>
-            <span className="text-3xl font-black">{documents.length} Files</span>
-          </div>
-        </div>
-
-        {conversations.length > 0 && (
-          <section className="bg-[#0B1A2C] border border-cyan-950 rounded-2xl p-5 space-y-3">
-            <div>
-              <h2 className="text-sm font-bold text-white">Conversation history</h2>
-              <p className="text-[11px] text-gray-400">Saved for this account</p>
-            </div>
-            {conversations.slice(0, 5).map((conversation) => (
-              <div key={conversation.id} className="border-t border-cyan-950/60 pt-3 space-y-1">
-                <p className="text-[11px] text-cyan-300">{conversation.fileName}</p>
-                <p className="conversation-question text-xs"><span className="font-semibold">Q:</span> {conversation.question}</p>
-                <p className="conversation-answer text-xs"><span className="font-semibold">A:</span> {conversation.answer}</p>
-              </div>
-            ))}
           </section>
         )}
 
@@ -220,7 +215,7 @@ export default function LibraryPage() {
               {conversations.filter((conversation) => conversation.documentId === activeDocument.id).map((conversation) => (
                 <div key={conversation.id} className="border-t border-cyan-950/60 pt-3 space-y-1">
                   <p className="conversation-question text-xs"><span className="font-semibold">Q:</span> {conversation.question}</p>
-                  <p className="conversation-answer text-xs whitespace-pre-wrap"><span className="font-semibold">A:</span> {conversation.answer}</p>
+                  <ExpandableAnswer answer={conversation.answer} className="conversation-answer text-xs" />
                 </div>
               ))}
             </div>
@@ -295,6 +290,17 @@ export default function LibraryPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        <div className="analytics-card analytics-card-compact text-gray-950 rounded-2xl shadow-xl">
+          <div className="analytics-compact-chart">
+            <div className="w-14 h-14 rounded-full border-4 border-yellow-700 border-t-red-600 border-r-blue-600 border-l-green-600"></div>
+            <BarChart2 className="w-4 h-4 absolute text-gray-900" />
+          </div>
+          <div>
+            <h3 className="text-xs font-black">Analytics</h3>
+            <p className="text-[9px] font-semibold text-gray-700">{documents.length} files indexed</p>
+          </div>
         </div>
       </main>
     </div>
