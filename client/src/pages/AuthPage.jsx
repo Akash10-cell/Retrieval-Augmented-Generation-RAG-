@@ -21,7 +21,7 @@ export default function AuthPage() {
     }
   }, [navigate, user]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -31,13 +31,17 @@ export default function AuthPage() {
     }
 
     if (isLogin) {
-      if (!login(email, password)) {
-        setError('No account found with those credentials. Sign up first or check your details.');
+      try {
+        await login(email, password);
+      } catch (requestError) {
+        setError(requestError.message || 'Unable to log in with those credentials.');
         return;
       }
     } else {
-      if (!signup(username, email, password)) {
-        setError('An account with this email already exists. Please log in.');
+      try {
+        await signup(username, email, password);
+      } catch (requestError) {
+        setError(requestError.message || 'Unable to create your account.');
         return;
       }
     }

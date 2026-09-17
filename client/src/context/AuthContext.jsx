@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
+import { loginUser, registerUser } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -9,34 +10,30 @@ export const AuthProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const login = (email, password) => {
-    const accounts = JSON.parse(localStorage.getItem('second_brain_accounts') || '{}');
-    const account = accounts[email.toLowerCase()];
-
-    if (!account || account.password !== password) {
-      return false;
-    }
-
-    const signedInUser = { email: account.email, name: account.name };
+  const login = async (email, password) => {
+    const account = await loginUser(email, password);
+    const signedInUser = {
+      email: account.email,
+      name: account.name,
+      token: account.token,
+      userId: account.user_id,
+    };
     setUser(signedInUser);
     localStorage.setItem('second_brain_user', JSON.stringify(signedInUser));
-    return true;
+    return signedInUser;
   };
 
-  const signup = (name, email, password) => {
-    const accounts = JSON.parse(localStorage.getItem('second_brain_accounts') || '{}');
-    const normalizedEmail = email.toLowerCase();
-
-    if (accounts[normalizedEmail]) {
-      return false;
-    }
-
-    const newUser = { name, email: normalizedEmail };
-    accounts[normalizedEmail] = { ...newUser, password };
-    localStorage.setItem('second_brain_accounts', JSON.stringify(accounts));
+  const signup = async (name, email, password) => {
+    const account = await registerUser(name, email, password);
+    const newUser = {
+      name,
+      email: email.toLowerCase(),
+      token: account.token,
+      userId: account.inserted_id,
+    };
     setUser(newUser);
     localStorage.setItem('second_brain_user', JSON.stringify(newUser));
-    return true;
+    return newUser;
   };
 
   const logout = () => {

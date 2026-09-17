@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud, FileText, CheckCircle2, X, Plus, BrainCircuit, Send, Image, Pencil, Globe } from 'lucide-react';
-import { askAboutDocument, storeDocument } from '../lib/api';
-import { saveRagResult } from '../lib/storage';
+import { askStoredDocument, saveConversation, storeDocument } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function UploadPage() {
@@ -56,14 +55,14 @@ export default function UploadPage() {
 
     try {
       const storedDocument = await storeDocument(selectedFile.file, user.email);
-      const result = await askAboutDocument(selectedFile.file, question.trim());
-      saveRagResult(user.email, {
+      const result = await askStoredDocument(storedDocument.id, user.email, question.trim());
+      await saveConversation({
+        owner_email: user.email,
+        document_id: storedDocument.id,
         fileName: selectedFile.name,
-        fileSize: selectedFile.size,
-        fileType: selectedFile.file.type || 'document',
-        storageId: storedDocument.id,
         question: question.trim(),
-        result,
+        answer: result.answer,
+        citations: result.citations || [],
       });
       setIsProcessing(false);
       navigate('/library', { state: { result, fileName: selectedFile.name } });
