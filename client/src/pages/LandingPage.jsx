@@ -9,8 +9,8 @@ export default function LandingPage() {
         {/* Glow Brain Illustration Box */}
         <div className="flex justify-center items-center relative">
           <div className="w-80 h-80 rounded-full bg-cyan-500/10 absolute blur-3xl -z-0"></div>
-          <div className="w-72 h-72 border border-cyan-500/30 rounded-2xl flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#0e2238] to-[#081524] shadow-2xl relative z-10">
-            <span className="text-6xl animate-pulse">🧠</span>
+          <div className="landing-brain-card w-72 h-72 border border-cyan-500/30 rounded-2xl flex flex-col items-center justify-center p-6 bg-gradient-to-b from-[#0e2238] to-[#081524] shadow-2xl relative z-10">
+            <img src="/brain2.webp" alt="AI neural brain" className="w-44 h-44 object-contain" />
             <div className="mt-4 text-center">
               <span className="text-xs uppercase tracking-widest text-cyan-400 font-semibold">AI Neural Core</span>
               <p className="text-xs text-gray-400 mt-1">Ready for indexing & citation extraction</p>
@@ -19,7 +19,7 @@ export default function LandingPage() {
         </div>
 
         {/* Hero Text */}
-        <div className="space-y-6">
+        <div className="landing-hero-copy space-y-6">
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
             <span className="italic font-serif font-light text-cyan-300">Your</span> <br />
             <span className="text-brand-accent">Second Brain</span> <br />
@@ -57,7 +57,7 @@ export default function LandingPage() {
       </section>
 
       {/* Feature Card Section */}
-      <section className="max-w-3xl w-full bg-[#0B1A2C] border border-cyan-950/60 rounded-2xl p-8 space-y-8 shadow-2xl">
+      <section className="landing-feature-card max-w-3xl w-full bg-[#0B1A2C] border border-cyan-950/60 rounded-2xl p-8 space-y-8 shadow-2xl">
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-bold text-brand-accent">Why Second Brain?</h2>
           <p className="text-xs text-gray-300 max-w-lg mx-auto">
@@ -77,7 +77,7 @@ export default function LandingPage() {
         </div>
 
         {/* How It Works Card */}
-        <div className="bg-[#D9DFE8] text-gray-900 rounded-xl p-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+        <div className="landing-how-card bg-[#D9DFE8] text-gray-900 rounded-xl p-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
           <div className="md:col-span-1 border-r-0 md:border-r border-gray-400/40 pr-4">
             <h4 className="text-xl font-bold">How it works :</h4>
             <span className="text-xs text-gray-600 italic">(Very simple)</span>
