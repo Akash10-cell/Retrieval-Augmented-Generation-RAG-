@@ -7,8 +7,9 @@ This project implements a complete **Retrieval-Augmented Generation (RAG)** pipe
 
 ## Key Features
 
-### 1. Multi-Format Document Ingestion & RAG (`POST /rag_3`)
-Processes multiple file types dynamically on the fly:
+### 1. Multi-Format Document Ingestion & Multi-File RAG (`POST /rag_3`)
+Processes single or multiple files across multiple file types dynamically in a single query:
+- **Simultaneous Multi-File Support**: Upload multiple documents at once under repeated `file` keys (standard in Postman/curl), `files` lists, or single uploads.
 - **PDF Documents (`.pdf`)**: Text extracted using `PyMuPDF` (`fitz`).
 - **Word Documents (`.docx`)**: Paragraphs extracted using `python-docx`.
 - **Text Files (`.txt`)**: Decoded as UTF-8 with automatic fallback handling.
@@ -18,19 +19,22 @@ Processes multiple file types dynamically on the fly:
 - Splits text cleanly using sentence boundary punctuation (`.`, `!`, `?`).
 - Groups sentences into chunks of **6 sentences** each.
 - Features a **2-sentence sliding overlap** between chunks to maintain semantic context across boundaries.
+- Tags each chunk with its source document name (e.g. `[filename.pdf]`) for clear multi-document tracing.
 
 ### 3. High-Dimensional Vector Embeddings
-- Integrated with Google Gemini's `gemini-embedding-2` model to generate high-dimensional vector representations for all chunks.
-- Supports batch embedding requests with sequential fallback.
+- Integrated with Google Gemini's `gemini-embedding-2` model to generate high-dimensional (3072-dim) vector representations for all chunks.
+- Computes individual chunk vectors to guarantee precise 1-to-1 vector similarity mapping.
 
-### 4. In-Memory Vector Store & Cosine Similarity
+### 4. Balanced Multi-Source Vector Retrieval
 - Custom NumPy-powered vector store computes cosine similarity between the query embedding and chunk vectors.
-- Efficiently retrieves the **Top 3** most semantically relevant chunks.
+- **Fair Multi-Document Representation**: When querying across multiple documents, the retrieval engine guarantees representation by pulling the top relevant chunks from **each** uploaded document, plus the overall top-scoring chunks up to a dynamic `top_k`.
+- Prevents chunks from a large or single dominant document from crowding out smaller documents or image OCR snippets.
 
 ### 5. Grounded Generation & Untruncated Citations
 - Leverages `gemini-3.5-flash-lite` to generate answers strictly based on the retrieved context chunks.
-- Responds with *"I don't know"* if the answer is not supported by context.
-- Returns top-matched citations with chunk IDs, similarity scores, and complete untruncated source text.
+- Multi-part questions spanning different files are accurately divided and answered per document context.
+- Responds with explicit notice if any specific part is not supported by the document context.
+- Returns top-matched citations with chunk IDs, source filenames, similarity scores, and complete untruncated source text.
 
 ### 6. Persistent Document Storage & Library Management
 In addition to the RAG endpoint, the backend provides full document lifecycle management:
@@ -90,24 +94,51 @@ Interactive docs are available at:
 ---
 
 ### 1. RAG Inference: `POST /rag_3`
-Runs document ingestion, vector retrieval, and question answering.
+Runs document ingestion, OCR, balanced vector retrieval, and question answering across one or **multiple files simultaneously**.
 
 - **Request Type**: `multipart/form-data`
 - **Parameters**:
-  - `file` (File): Upload document (`.pdf`, `.docx`, `.txt`, `.png`, `.jpg`, `.jpeg`)
-  - `question` (Text): Query/question about the document
+  - `file` (File / Repeated Files): Upload one or multiple files by repeating the `file` key (standard in Postman, curl, HTML forms).
+  - `files` (Files, optional): Multiple files uploaded as a list.
+  - `question` (Text): Query or multi-part questions across the uploaded documents.
+  - *Supported formats*: `.pdf`, `.docx`, `.txt`, `.png`, `.jpg`, `.jpeg`.
+
+- **Postman Usage Example**:
+  In Postman `form-data`, you can add multiple rows with Key `file` (Type: `File`) pointing to different documents and images:
+  - `file`: `Python_RAG_Test_Document.pdf`
+  - `file`: `WhatsApp Image.jpeg`
+  - `file`: `IIT Patna AIML Project Guidelines.pdf`
+  - `question`: `who created python and what is OCR and can you summarize the IIT Patna AIML project ?`
 
 - **Sample Response**:
 ```json
 {
   "status": true,
-  "question": "What is the key takeaway?",
-  "answer": "According to the document, the primary conclusion is...",
+  "question": "who created python and what is OCR and can you summarize the IIT Patna AIML project ?",
+  "answer": "Based on the provided documents:\n* Python was created by Guido van Rossum in the late 1980s [Python_RAG_Test_Document.pdf].\n* OCR stands for Optical Character Recognition [WhatsApp Image.jpeg].\n* IIT Patna AIML project 1 is a Multi-LLM Custom ChatGPT...",
+  "processed_files": [
+    "Python_RAG_Test_Document.pdf",
+    "WhatsApp Image.jpeg",
+    "IIT Patna AIML Project Guidelines.pdf"
+  ],
   "citations": [
     {
       "chunk_id": 0,
-      "similarity_score": 0.8654,
-      "text_snippet": "Sentence 1. Sentence 2. Sentence 3. Sentence 4. Sentence 5. Sentence 6."
+      "source_file": "Python_RAG_Test_Document.pdf",
+      "similarity_score": 0.7038,
+      "text_snippet": "[Python_RAG_Test_Document.pdf] Python was created by Guido van Rossum..."
+    },
+    {
+      "chunk_id": 4,
+      "source_file": "WhatsApp Image.jpeg",
+      "similarity_score": 0.6522,
+      "text_snippet": "[WhatsApp Image.jpeg] OCR stands for Optical Character Recognition..."
+    },
+    {
+      "chunk_id": 8,
+      "source_file": "IIT Patna AIML Project Guidelines.pdf",
+      "similarity_score": 0.6916,
+      "text_snippet": "[IIT Patna AIML Project Guidelines.pdf] Project 1 Multi-LLM Custom ChatGPT..."
     }
   ]
 }

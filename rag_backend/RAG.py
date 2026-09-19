@@ -1,18 +1,19 @@
-from google import genai               #type:ignore
+from google import genai          #type:ignore
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Query       #type:ignore
-import pymupdf                     # type: ignore
+import pymupdf                    # type: ignore
 import numpy as np                #type:ignore
 import os
-from dotenv import load_dotenv   #type:ignore
+from dotenv import load_dotenv    #type:ignore
 import re
-import docx                     #type:ignore
-from PIL import Image           #type:ignore
-import io                       #type:ignore
-import bcrypt                    #type:ignore
-from pymongo import MongoClient  #type:ignore
+import docx                       #type:ignore
+from PIL import Image             #type:ignore
+import io                         #type:ignore
+import bcrypt                     #type:ignore
+from pymongo import MongoClient   #type:ignore
 import uuid
 from pathlib import Path
 
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 load_dotenv()
 
 app = FastAPI()
@@ -205,7 +206,7 @@ def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
                 model="gemini-3.5-flash-lite",
                 contents=["Extract all the text from this document or image accurately. Return only the extracted text. If no text exists, return empty.", image]
             )
-            full_text = ocr_response.text
+            full_text = ocr_response.text or ""
         else:
             raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, TXT, or Image (.png/.jpg).")
     except HTTPException:
@@ -219,21 +220,12 @@ def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
     return full_text
 
 
-def run_rag_pipeline(full_text: str, question: str) -> dict:
-    """Executes chunking, embedding generation, vector search, and Gemini response synthesis."""
-    chunks = chunk_text(full_text, chunk_size=6, overlap=2)
+def run_rag_pipeline_on_chunks(chunks: list[str], question: str, sources: list[str] = None) -> dict:
+    """Executes embedding generation, vector similarity search, and Gemini response synthesis over chunks."""
     if not chunks:
-        raise HTTPException(status_code=400, detail="No valid chunks found in document.")
+        raise HTTPException(status_code=400, detail="No valid chunks found across uploaded file(s).")
 
-    try:
-        response = client.models.embed_content(
-            model="gemini-embedding-2",
-            contents=chunks
-        )
-        chunk_embeddings = [np.array(e.values) for e in response.embeddings]
-    except Exception:
-        chunk_embeddings = [get_embedding(c) for c in chunks]
-
+    chunk_embeddings = [get_embedding(c) for c in chunks]
     vector_store = np.array(chunk_embeddings)
     question_embedding = get_embedding(question)
 
@@ -241,15 +233,35 @@ def run_rag_pipeline(full_text: str, question: str) -> dict:
     norms = np.where(norms == 0, 1e-10, norms)
     similarities = np.dot(vector_store, question_embedding) / norms
 
-    top_k = min(3, len(chunks))
-    top_indices = np.argsort(similarities)[-top_k:][::-1]
+    unique_sources = list(dict.fromkeys(sources)) if sources else []
+    if len(unique_sources) > 1:
+        selected_indices = set()
+        # Guarantee representation from each uploaded source document
+        for src in unique_sources:
+            src_indices = [i for i, s in enumerate(sources) if s == src]
+            if src_indices:
+                src_sorted = sorted(src_indices, key=lambda i: similarities[i], reverse=True)
+                selected_indices.update(src_sorted[:2])
+        # Also include overall top-scoring chunks up to target_k
+        global_sorted = np.argsort(similarities)[::-1]
+        target_k = min(max(6, len(unique_sources) * 3), len(chunks), 12)
+        for idx in global_sorted:
+            if len(selected_indices) >= target_k:
+                break
+            selected_indices.add(int(idx))
+        top_indices = sorted(list(selected_indices), key=lambda i: similarities[i], reverse=True)
+    else:
+        top_k = min(5, len(chunks))
+        top_indices = np.argsort(similarities)[-top_k:][::-1].tolist()
+
     retrieved_chunks = [chunks[i] for i in top_indices]
     context = "\n\n---\n\n".join(retrieved_chunks)
 
-    prompt = f"""
-You are a helpful AI assistant.
-Answer the question based ONLY on the provided document context.
-If the answer is not present in the context, respond with "I don't know".
+    prompt = f"""You are a helpful AI assistant.
+Answer the question accurately and thoroughly based ONLY on the provided document context.
+The context contains excerpts from one or multiple uploaded documents (each indicated by its filename in brackets, e.g. [filename]).
+If multiple questions are asked or the question relates to multiple documents, answer each part clearly using the corresponding document context.
+If any specific information is not present in the context, explicitly state that that part was not found in the documents.
 
 Context:
 {context}
@@ -263,11 +275,14 @@ Question: {question}
 
     citations = []
     for idx in top_indices:
-        citations.append({
+        citation_item = {
             "chunk_id": int(idx),
             "similarity_score": round(float(similarities[idx]), 4),
             "text_snippet": chunks[idx].strip()
-        })
+        }
+        if sources and idx < len(sources):
+            citation_item["source_file"] = sources[idx]
+        citations.append(citation_item)
 
     return {
         "status": True,
@@ -277,11 +292,68 @@ Question: {question}
     }
 
 
+def run_rag_pipeline(full_text: str, question: str) -> dict:
+    """Backwards-compatible helper for single text RAG execution."""
+    chunks = chunk_text(full_text, chunk_size=6, overlap=2)
+    return run_rag_pipeline_on_chunks(chunks, question)
+
+
 @app.post("/rag_3")
-async def rag_3(file: UploadFile = File(...), question: str = Form(...)):
-    file_bytes = await file.read()
-    full_text = extract_text_from_bytes(file_bytes, file.filename or "document.txt")
-    return run_rag_pipeline(full_text, question)
+async def rag_3(
+    request: Request,
+    files: list[UploadFile] = File(default=[]),
+    file: list[UploadFile] = File(default=[]),
+    question: str = Form(None),
+):
+    """
+    RAG endpoint supporting single or multiple files (PDF, DOCX, TXT, Images) simultaneously.
+    Accepts multiple files under 'files', 'file', or repeated form keys in Postman/frontends.
+    """
+    upload_list = []
+    if files:
+        upload_list.extend(files)
+    if file:
+        upload_list.extend(file)
+
+    form = await request.form()
+    if not question:
+        question = form.get("question", "")
+
+    if not upload_list:
+        for _, val in form.multi_items():
+            if isinstance(val, UploadFile):
+                upload_list.append(val)
+
+    if not upload_list:
+        raise HTTPException(status_code=400, detail="At least one file must be uploaded.")
+
+    if not question or not str(question).strip():
+        raise HTTPException(status_code=400, detail="question is required.")
+
+    all_chunks = []
+    chunk_sources = []
+    processed_files = []
+
+    for uploaded_file in upload_list:
+        file_bytes = await uploaded_file.read()
+        if not file_bytes:
+            continue
+        fname = uploaded_file.filename or "document.txt"
+        extracted_text = extract_text_from_bytes(file_bytes, fname)
+        file_chunks = chunk_text(extracted_text, chunk_size=6, overlap=2)
+        for chunk in file_chunks:
+            labeled_chunk = f"[{fname}] {chunk}"
+            all_chunks.append(labeled_chunk)
+            chunk_sources.append(fname)
+        processed_files.append(fname)
+
+    if not all_chunks:
+        raise HTTPException(status_code=400, detail="No readable text found in any of the uploaded files.")
+
+    result = run_rag_pipeline_on_chunks(all_chunks, str(question).strip(), sources=chunk_sources)
+    result["processed_files"] = processed_files
+    return result
+
 
 
 # Persistent document storage API. The existing RAG endpoint above remains unchanged.
